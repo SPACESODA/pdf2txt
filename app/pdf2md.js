@@ -1,12 +1,25 @@
 // PDF Processing Logic - pdf2md
 
-const processPDF = async (file) => {
+const processPDF = async (file, options = {}) => {
     const MAX_PAGE_TEXT_BYTES = 200 * 1024 * 1024;
     const textEncoder = new TextEncoder();
+    const signal = options.signal;
     let pdf = null;
+    const throwIfAborted = () => {
+        if (signal && signal.aborted) {
+            const err = new Error('Aborted');
+            err.name = 'AbortError';
+            throw err;
+        }
+    };
     try {
+        throwIfAborted();
         const arrayBuffer = await file.arrayBuffer();
-        pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+        const documentOptions = { data: arrayBuffer };
+        if (window.pdf2mdStandardFontDataUrl) {
+            documentOptions.standardFontDataUrl = window.pdf2mdStandardFontDataUrl;
+        }
+        pdf = await pdfjsLib.getDocument(documentOptions).promise;
 
         let allItems = [];
 
@@ -14,12 +27,17 @@ const processPDF = async (file) => {
         // Iterate through every page to extract text chunks (items) with their X/Y coordinates and font height.
         // This 'soup' of items will later be sorted and structured into lines and paragraphs.
         for (let i = 1; i <= pdf.numPages; i++) {
+            throwIfAborted();
             const page = await pdf.getPage(i);
             const viewport = page.getViewport({ scale: 1.0 });
             const textContent = await page.getTextContent();
 
             let pageTextBytes = 0;
+            let itemChecks = 0;
             for (const item of textContent.items) {
+                if ((itemChecks += 1) % 200 === 0) {
+                    throwIfAborted();
+                }
                 const text = item.str || '';
                 if (!text) {
                     continue;
@@ -288,7 +306,7 @@ const processPDF = async (file) => {
         let rawMD = markdownLines.join("\n");
 
         // 1. Merge hyphenated words at end of line
-        rawMD = rawMD.replace(/(\w)-\n(\w)/g, '$1$2');
+        rawMD = rawMD.replace(/([\p{L}\p{N}])-\n([\p{L}\p{N}])/gu, '$1$2');
 
         // 2. Merge hard-wrapped lines (CRITICAL for PDF to MD)
         // Merge lines that look like a wrapped sentence, preserving paragraph breaks.
@@ -296,27 +314,66 @@ const processPDF = async (file) => {
             const lines = text.split("\n");
             const merged = [];
             const isHeading = (line) => /^\s*#+\s/.test(line);
-            const isList = (line) => /^\s*([-*•]|\d+\.)\s+/.test(line);
+            const isList = (line) => /^\s*([-*•●]|\d+\.)\s+/.test(line);
             const isHardStop = (line) => /[.!?。！？]$/.test(line);
             const endsWithDash = (line) => /[-–—]$/.test(line);
-            for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                const next = lines[i + 1];
-                if (!next || line === "" || next === "") {
-                    merged.push(line);
-                    continue;
+            const isCJKCharLocal = (ch) => /[\u3040-\u30FF\u3400-\u4DBF\u4E00-\u9FFF\uF900-\uFAFF\uAC00-\uD7AF]/.test(ch);
+            const getFirstCharLocal = (line) => {
+                for (const ch of line) {
+                    if (ch.trim()) return ch;
                 }
-                if (isHeading(line) || isHeading(next) || isList(line) || isList(next)) {
-                    merged.push(line);
-                    continue;
+                return "";
+            };
+            const getLastCharLocal = (line) => {
+                for (let i = line.length - 1; i >= 0; i--) {
+                    const ch = line[i];
+                    if (ch.trim()) return ch;
                 }
-                if (endsWithDash(line) || isHardStop(line)) {
-                    merged.push(line);
-                    continue;
+                return "";
+            };
+            const shouldInsertSpaceLocal = (prevChar, nextChar) => {
+                if (!prevChar || !nextChar) return true;
+                return !(isCJKCharLocal(prevChar) && isCJKCharLocal(nextChar));
+            };
+
+            if (lines.length === 0) return "";
+
+            let buffer = lines[0];
+
+            for (let i = 1; i < lines.length; i++) {
+                const current = lines[i];
+
+                // Conditions to flush the buffer (start a new line):
+                // 1. Buffer is empty (was a blank line)
+                // 2. Current line is empty (paragraph break)
+                // 3. Current line is a Header or List Item
+                // 4. Buffer was a Header or List Item (don't merge into it)
+                // 5. Buffer ended with a hard stop (., !, ?) AND didn't end with a dash
+                const shouldFlush =
+                    !buffer.trim() ||
+                    !current.trim() ||
+                    isHeading(current) ||
+                    isHeading(buffer) ||
+                    (isHardStop(buffer) && !endsWithDash(buffer));
+
+                if (shouldFlush) {
+                    merged.push(buffer);
+                    buffer = current;
+                } else {
+                    const bufferIsList = isList(buffer);
+                    const currentIsList = isList(current);
+                    if (bufferIsList && !currentIsList && !isHeading(current)) {
+                        const prevChar = getLastCharLocal(buffer);
+                        const nextChar = getFirstCharLocal(current);
+                        const joiner = shouldInsertSpaceLocal(prevChar, nextChar) ? " " : "";
+                        buffer += joiner + current.trim();
+                    } else {
+                        buffer += " " + current;
+                    }
                 }
-                merged.push(line + " " + next);
-                i += 1;
             }
+            if (buffer) merged.push(buffer);
+
             return merged.join("\n");
         };
         rawMD = mergeWrappedLines(rawMD);

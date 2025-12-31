@@ -9,7 +9,7 @@
     <meta name="robots" content="index,follow">
     <link rel="canonical" href="https://spacesoda.github.io/pdf2md/">
     <!-- CSP -->
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' https://unpkg.com https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cloud.umami.is; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://cdnjs.cloudflare.com https://unpkg.com https://cloud.umami.is https://api-gateway.umami.dev; worker-src 'self' blob: https://cdnjs.cloudflare.com;">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cloud.umami.is; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com https://cloud.umami.is https://api-gateway.umami.dev; worker-src 'self' blob: https://cdnjs.cloudflare.com;">
     <!-- Social -->
     <meta property="og:title" content="pdf2md - PDF to Markdown Converter">
     <meta property="og:description" content="Convert PDFs to clean, LLM-ready Markdown in your browser. Batch process files locally with no uploads.">
@@ -33,54 +33,53 @@
         .scrollbar-hide::-webkit-scrollbar { display: none; }
         .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
+    <!-- Preload Core Dependencies -->
+    <link rel="preload" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" as="script" crossorigin>
+    <link rel="prefetch" href="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js" as="script" crossorigin>
     <!-- Tailwind -->
     <script src="https://cdn.tailwindcss.com"></script>
-    <!-- Framework (React, Babel) -->
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <!-- Framework (React) -->
+    <script defer crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script defer crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <!-- Icons -->
-    <script src="https://unpkg.com/lucide@latest"></script>
+    <script defer src="https://unpkg.com/lucide@latest"></script>
     <!-- Logic Dependencies (PDF.js, JSZip) -->
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-    <script>
-        pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-        pdfjsLib.GlobalWorkerOptions.standardFontDataUrl = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/standard_fonts/';
-    </script>
+    <script defer src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js" crossorigin="anonymous"></script>
+    <script defer src="app/pdf2md-config.js"></script>
     <script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
     <!-- Core App Logic -->
-    <script src="app/pdf2md.js"></script>
+    <script defer src="app/pdf2md.js"></script>
+    <!-- UI -->
+    <script defer src="app/pdf2md-ui.js"></script>
     <!-- Analytics -->
     <script defer src="https://cloud.umami.is/script.js" data-website-id="8771ed9f-edd3-4665-bf16-1bc95940af08"></script>
-    <!-- UI -->
-    <script type="text/babel" src="app/pdf2md-ui.js"></script>
 </head>
 
-<body class="bg-[#050505] text-zinc-100 h-screen flex flex-col overflow-hidden relative selection:bg-white/20 selection:text-white">
+<body class="bg-[#050505] text-zinc-100 min-h-screen lg:h-screen flex flex-col lg:overflow-hidden relative selection:bg-white/20 selection:text-white">
 
     <!-- Ambient Spotlight -->
     <div class="absolute top-0 left-1/2 -translate-x-1/2 w-[800px] h-[400px] bg-white/5 blur-[100px] rounded-full pointer-events-none mix-blend-screen opacity-40"></div>
 
-    <div class="flex flex-col h-full max-w-4xl mx-auto w-full p-6 md:pt-12 md:pb-1">
+    <div class="flex flex-col lg:h-full max-w-4xl mx-auto w-full p-4 md:p-6 lg:pt-12 lg:pb-1">
         <!-- Header -->
         <div class="text-center space-y-3">
             <div class="inline-flex items-center justify-center px-3 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] uppercase tracking-widest text-zinc-400 mb-2">
                 Beta
             </div>
-            <h1 class="text-4xl md:text-5xl font-bold text-white tracking-tight mb-2">
+            <h1 class="text-4xl md:text-4xl font-bold text-white tracking-tight mb-2">
                 pdf2md
             </h1>
             <p class="text-zinc-300 text-lg max-w-lg mx-auto leading-relaxed">
                 Convert PDF books into clean, LLM-ready markdown files.
                 <br>
-                <span class="text-[13px] text-zinc-500 opacity-80">All files processed in your browser locally. No uploads to any server.</span>
+                <span class="text-[14px] text-zinc-200 opacity-80">All files processed in your browser locally. No uploads to any server.</span>
             </p>
         </div>
 
         <div id="root" class="relative z-10 flex-1 w-full min-h-0"></div>
 
-        <footer class="relative z-10 pt-4 pb-8 text-center text-xs text-zinc-500 opacity-70 space-y-1">
-            <div class="tracking-wide text-zinc-400">© SPACESODA / ANTHONYC</div>
+        <footer class="relative z-10 pt-4 pb-8 text-center text-xs text-zinc-400 opacity-80 space-y-1">
+            <div class="tracking-wide text-zinc-200">© SPACESODA / ANTHONYC</div>
             <div>Released under the MIT License.</div>
             <div>
                 <a href="https://github.com/SPACESODA/pdf2md/" class="hover:text-zinc-200 transition-colors" rel="noopener noreferrer" target="_blank">
