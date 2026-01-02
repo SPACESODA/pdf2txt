@@ -446,7 +446,7 @@ const App = () => {
 
     return h(
         'div',
-        { className: 'flex flex-col lg:h-full max-w-4xl mx-auto w-full mt-6 lg:mt-0 lg:pt-8 lg:pb-4' },
+        { className: 'flex flex-col lg:h-full max-w-4xl mx-auto w-full mt-6 lg:mt-0 lg:pt-8 pb-4 lg:pb-2' },
         h(
             'div',
             { className: 'flex-1 flex flex-col lg:flex-row gap-4 lg:gap-6 lg:overflow-hidden min-h-0' },
