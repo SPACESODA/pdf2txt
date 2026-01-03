@@ -12,9 +12,9 @@
   - Detecting and formatting headers.
   - Removing page numbers (basic detection).
 - **Fast Batch Processing**: Drag and drop multiple PDFs to convert them all at once.
+- **Password-protected PDFs**: Unlock files with a password and convert them locally.
 - **Bulk Download**: Download all converted files as a single ZIP archive.
-
 
 ## License
 
-This project is released under the **MIT License**.
+This project is released under the MIT License.

@@ -1,6 +1,12 @@
 const { useState, useRef, useEffect } = React;
 const h = React.createElement;
 const Fragment = React.Fragment;
+// Status used while unlocked PDFs wait to be converted.
+const UNLOCK_QUEUED_STATUS = 'unlock-queued';
+// Retry cadence for PDF engine readiness checks.
+const ENGINE_SOFT_RETRY_MS = 5000;
+const ENGINE_SOFT_RETRIES_PER_HARD = 5;
+const ENGINE_MAX_HARD_RETRIES = 5;
 
 // --- Error Boundary ---
 class ErrorBoundary extends React.Component {
@@ -73,11 +79,19 @@ const Icon = ({ name, className }) => {
     return h('span', { ref, className: 'inline-flex items-center justify-center pointer-events-none' });
 };
 
-const FileRow = ({ fileData, onDownload, onRemove, outputFormat }) => {
+const FileRow = ({ fileData, onDownload, onRemove, outputFormat, onPasswordChange, onPasswordSubmit }) => {
+    const passwordHelper = window.pdf2txtPassword;
+    // Mask text input on WebKit while keeping password managers quiet.
+    const supportsWebkitTextSecurity = typeof CSS !== 'undefined'
+        && typeof CSS.supports === 'function'
+        && CSS.supports('-webkit-text-security', 'disc');
+    const unlockQueuedStatus = UNLOCK_QUEUED_STATUS;
     const IconStatus = () => {
         if (fileData.status === 'processing') return h(Icon, { name: 'loader-2', className: 'w-5 h-5 text-white animate-spin' });
         if (fileData.status === 'done') return h(Icon, { name: 'check', className: 'w-5 h-5 text-white' });
         if (fileData.status === 'error') return h(Icon, { name: 'alert-circle', className: 'w-5 h-5 text-red-400' });
+        if (fileData.status === 'password') return h(Icon, { name: 'lock', className: 'w-5 h-5 text-amber-300' });
+        if (fileData.status === unlockQueuedStatus) return h(Icon, { name: 'lock', className: 'w-5 h-5 text-amber-300' });
         if (fileData.status === 'skipped') return h(Icon, { name: 'x-circle', className: 'w-5 h-5 text-zinc-500' });
         return h(Icon, { name: 'file-text', className: 'w-5 h-5 text-zinc-400' });
     };
@@ -87,10 +101,28 @@ const FileRow = ({ fileData, onDownload, onRemove, outputFormat }) => {
         processing: 'bg-white/10',
         done: 'bg-white/10',
         error: 'bg-red-500/10',
+        password: 'bg-amber-500/10',
+        [unlockQueuedStatus]: 'bg-amber-500/10',
         skipped: 'bg-zinc-800/50'
     };
 
+    const passwordStatus = passwordHelper && passwordHelper.PASSWORD_STATUS
+        ? passwordHelper.PASSWORD_STATUS
+        : 'password';
+
+    const statusLabel = passwordHelper && typeof passwordHelper.getStatusLabel === 'function'
+        ? passwordHelper.getStatusLabel(fileData.status)
+        : (fileData.status === passwordStatus ? 'needs password' : fileData.status);
+    const displayStatusLabel = fileData.status === unlockQueuedStatus
+        ? 'unlocked'
+        : statusLabel;
+
+    const shouldShowPasswordField = (passwordHelper && typeof passwordHelper.shouldShowPasswordField === 'function'
+        ? passwordHelper.shouldShowPasswordField(fileData)
+        : fileData.status === passwordStatus) || fileData.status === unlockQueuedStatus;
+
     const downloadLabel = outputFormat === 'md' ? 'Download Markdown' : 'Download TXT';
+    const unlockButtonLabel = fileData.status === unlockQueuedStatus ? 'Unlocked. Please wait.' : 'Unlock';
 
     return h(
         'div',
@@ -110,15 +142,57 @@ const FileRow = ({ fileData, onDownload, onRemove, outputFormat }) => {
                 h(
                     'span',
                     { className: 'text-[11px] text-zinc-500 uppercase tracking-wider font-medium mt-0.5' },
-                    `${(fileData.file.size / 1024 / 1024).toFixed(2)} MB • ${fileData.status}`
+                    `${(fileData.file.size / 1024 / 1024).toFixed(2)} MB • ${displayStatusLabel}`
                 ),
-                fileData.errorMsg
+                fileData.errorMsg && fileData.status !== passwordStatus && fileData.status !== unlockQueuedStatus
                     ? h(
                         'span',
                         {
                             className: 'text-[10px] text-red-400 font-medium mt-1 leading-snug bg-red-500/10 px-2 py-1 rounded inline-block w-fit max-w-full break-words border border-red-500/20'
                         },
                         fileData.errorMsg
+                    )
+                    : null,
+                shouldShowPasswordField
+                    ? h(
+                        'div',
+                        { className: 'mt-2 flex flex-wrap items-center gap-2' },
+                        h('input', {
+                            type: supportsWebkitTextSecurity ? 'text' : 'password',
+                            value: fileData.password || '',
+                            placeholder: 'Enter password',
+                            name: `file-key-${fileData.id}`,
+                            autoComplete: 'off',
+                            autoCorrect: 'off',
+                            autoCapitalize: 'off',
+                            spellCheck: false,
+                            readOnly: fileData.status === unlockQueuedStatus,
+                            style: supportsWebkitTextSecurity ? { WebkitTextSecurity: 'disc' } : undefined,
+                            'data-1p-ignore': 'true',
+                            'data-lpignore': 'true',
+                            'data-bwignore': 'true',
+                            'data-form-type': 'other',
+                            onChange: (e) => onPasswordChange(fileData.id, e.target.value),
+                            onKeyDown: (e) => {
+                                if (e.key === 'Enter') {
+                                    onPasswordSubmit(fileData.id);
+                                }
+                            },
+                            className: `flex-1 min-w-[160px] px-3 py-2 rounded-lg bg-zinc-900 border text-xs text-zinc-200 placeholder:text-zinc-600 focus:outline-none focus:ring-2 ${fileData.passwordError
+                                ? 'border-red-500/70 focus:ring-red-500/40'
+                                : 'border-zinc-700 focus:ring-white/10'
+                                }`
+                        }),
+                        h(
+                            'button',
+                            {
+                                type: 'button',
+                                onClick: () => onPasswordSubmit(fileData.id),
+                                disabled: !fileData.password || fileData.status === 'processing' || fileData.status === unlockQueuedStatus,
+                                className: 'px-3 py-2 rounded-lg bg-white text-black text-xs font-semibold hover:bg-zinc-200 disabled:opacity-40 disabled:cursor-not-allowed transition-colors'
+                            },
+                            unlockButtonLabel
+                        )
                     )
                     : null
             )
@@ -156,27 +230,133 @@ const App = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const [engineReady, setEngineReady] = useState(false);
     const [engineError, setEngineError] = useState(false);
+    const [engineErrorMessage, setEngineErrorMessage] = useState('');
     const [outputFormat, setOutputFormat] = useState('txt');
     const [formatLocked, setFormatLocked] = useState(false);
     const fileInputRef = useRef(null);
     const abortControllersRef = useRef(new Map());
     const filesRef = useRef([]);
+    const batchRunningRef = useRef(false);
+    const unlockQueueRunningRef = useRef(false);
+    const batchIdRef = useRef(0);
+    const engineRetryTimerRef = useRef(null);
+    const engineRetryActiveRef = useRef(false);
+    const engineSoftRetriesRef = useRef(0);
+    const engineHardRetriesRef = useRef(0);
+    const engineFinalErrorRef = useRef(false);
+    const engineWaitPromiseRef = useRef(null);
 
     const MAX_FILE_SIZE = 1024 * 1024 * 1024;
+    const passwordHelper = window.pdf2txtPassword || {};
+    const passwordStatus = passwordHelper.PASSWORD_STATUS || 'password';
+    const unlockQueuedStatus = UNLOCK_QUEUED_STATUS;
+
+    // Fill worker/font URLs after PDF.js becomes available.
+    const ensurePdfJsConfig = () => {
+        if (!window.pdfjsLib || !window.pdfjsLib.GlobalWorkerOptions) return;
+        if (!window.pdfjsLib.GlobalWorkerOptions.workerSrc && window.pdf2txtWorkerSrc) {
+            window.pdfjsLib.GlobalWorkerOptions.workerSrc = window.pdf2txtWorkerSrc;
+        }
+        if (!window.pdfjsLib.GlobalWorkerOptions.standardFontDataUrl && window.pdf2txtStandardFontDataUrl) {
+            window.pdfjsLib.GlobalWorkerOptions.standardFontDataUrl = window.pdf2txtStandardFontDataUrl;
+        }
+        if (!window.pdf2txtStandardFontDataUrl) {
+            window.pdf2txtStandardFontDataUrl = window.pdfjsLib.GlobalWorkerOptions.standardFontDataUrl;
+        }
+    };
+
+    // Validate engine readiness and apply missing config.
+    const checkEngineReady = () => {
+        const ready = typeof window.pdfjsLib !== 'undefined' && typeof window.processPDF === 'function';
+        if (ready) {
+            ensurePdfJsConfig();
+        }
+        return ready;
+    };
+
+    const stopEngineRetryLoop = () => {
+        engineRetryActiveRef.current = false;
+        if (engineRetryTimerRef.current) {
+            clearTimeout(engineRetryTimerRef.current);
+            engineRetryTimerRef.current = null;
+        }
+    };
+
+    const markEngineReady = () => {
+        setEngineReady(true);
+        setEngineError(false);
+        setEngineErrorMessage('');
+        engineSoftRetriesRef.current = 0;
+        engineHardRetriesRef.current = 0;
+        engineFinalErrorRef.current = false;
+        stopEngineRetryLoop();
+    };
+
+    // Reuse the script tag source to keep retry versions aligned.
+    const getPdfJsScriptSrc = () => {
+        const script = document.querySelector('script[src*="pdfjs-dist"][src*="pdf.min.js"]');
+        return script ? script.getAttribute('src') : '';
+    };
+
+    const hardRetryPdfJs = () => {
+        const src = getPdfJsScriptSrc();
+        if (!src) return;
+        const retrySrc = src.includes('?') ? `${src}&retry=${Date.now()}` : `${src}?retry=${Date.now()}`;
+        const script = document.createElement('script');
+        script.src = retrySrc;
+        script.defer = true;
+        script.async = true;
+        script.setAttribute('data-pdfjs-retry', 'true');
+        script.onload = () => {
+            if (checkEngineReady()) {
+                markEngineReady();
+                if (filesRef.current.some(f => f.status === unlockQueuedStatus) && !batchRunningRef.current) {
+                    processUnlockQueue();
+                }
+            }
+        };
+        document.head.appendChild(script);
+    };
+
+    // Soft retry loop with periodic hard reloads of PDF.js.
+    const startEngineRetryLoop = () => {
+        if (engineRetryActiveRef.current || engineFinalErrorRef.current) return;
+        engineRetryActiveRef.current = true;
+        setEngineError(true);
+        setEngineErrorMessage("PDF engine didn't load. Retrying in 5s...");
+
+        const tick = () => {
+            engineRetryTimerRef.current = setTimeout(() => {
+                if (checkEngineReady()) {
+                    markEngineReady();
+                    if (filesRef.current.some(f => f.status === unlockQueuedStatus) && !batchRunningRef.current) {
+                        processUnlockQueue();
+                    }
+                    return;
+                }
+                if (engineHardRetriesRef.current >= ENGINE_MAX_HARD_RETRIES) {
+                    engineFinalErrorRef.current = true;
+                    setEngineError(true);
+                    setEngineErrorMessage("PDF engine didn't load. Try again later.");
+                    stopEngineRetryLoop();
+                    return;
+                }
+                engineSoftRetriesRef.current += 1;
+                if (engineSoftRetriesRef.current % ENGINE_SOFT_RETRIES_PER_HARD === 0) {
+                    engineHardRetriesRef.current += 1;
+                    hardRetryPdfJs();
+                }
+                tick();
+            }, ENGINE_SOFT_RETRY_MS);
+        };
+
+        tick();
+    };
 
     useEffect(() => {
-        let isMounted = true;
-        const timer = setInterval(() => {
-            const ready = typeof window.pdfjsLib !== 'undefined' && typeof window.processPDF === 'function';
-            if (ready && isMounted) {
-                setEngineReady(true);
-                setEngineError(false);
-                clearInterval(timer);
-            }
-        }, 100);
+        waitForEngine();
         return () => {
-            isMounted = false;
-            clearInterval(timer);
+            stopEngineRetryLoop();
         };
     }, []);
 
@@ -250,7 +430,11 @@ const App = () => {
                     file: f,
                     status: status,
                     errorMsg: errorMsg,
-                    md: null
+                    md: null,
+                    password: '',
+                    passwordError: false,
+                    wasPasswordProtected: false,
+                    batchId: null
                 });
             });
 
@@ -285,112 +469,236 @@ const App = () => {
         }).filter(Boolean));
     };
 
-    const updateFileStatus = (id, status, md = null, errorMsg = null) => {
+    const updateFileStatus = (id, status, md = null, errorMsg = null, extra = null) => {
         updateFiles(prev => prev.map(f => {
             if (f.id !== id) return f;
             if (f.canceled) return f;
-            return { ...f, status, md: md || f.md, errorMsg };
+            return {
+                ...f,
+                status,
+                md: md || f.md,
+                errorMsg,
+                passwordError: status === passwordStatus ? f.passwordError : false,
+                ...(extra ? extra : {})
+            };
+        }));
+    };
+
+    const getPasswordState = (err) => {
+        if (typeof passwordHelper.getPasswordStateFromError === 'function') {
+            return passwordHelper.getPasswordStateFromError(err);
+        }
+        return { status: passwordStatus, errorMsg: null, invalidPassword: false };
+    };
+
+    const setPasswordRequired = (id, err) => {
+        const passwordState = getPasswordState(err);
+        updateFiles(prev => prev.map(f => {
+            if (f.id !== id) return f;
+            return {
+                ...f,
+                status: passwordState.status || passwordStatus,
+                errorMsg: null,
+                passwordError: passwordState.invalidPassword === true,
+                wasPasswordProtected: true,
+                md: null
+            };
+        }));
+    };
+
+    const handlePasswordChange = (id, value) => {
+        const nextValue = typeof passwordHelper.normalizePassword === 'function'
+            ? passwordHelper.normalizePassword(value)
+            : value;
+        updateFiles(prev => prev.map(f => {
+            if (f.id !== id) return f;
+            return { ...f, password: nextValue, passwordError: false, errorMsg: f.status === passwordStatus ? null : f.errorMsg };
         }));
     };
 
     const waitForEngine = async () => {
         if (engineReady) return true;
-        const maxWaitMs = 15000;
-        const start = Date.now();
-        while (Date.now() - start < maxWaitMs) {
-            const ready = typeof window.pdfjsLib !== 'undefined' && typeof window.processPDF === 'function';
-            if (ready) {
-                setEngineReady(true);
-                setEngineError(false);
-                return true;
+        if (engineFinalErrorRef.current) return false;
+        if (engineWaitPromiseRef.current) return engineWaitPromiseRef.current;
+        engineWaitPromiseRef.current = (async () => {
+            const maxWaitMs = 15000;
+            const start = Date.now();
+            while (Date.now() - start < maxWaitMs) {
+                if (checkEngineReady()) {
+                    markEngineReady();
+                    engineWaitPromiseRef.current = null;
+                    return true;
+                }
+                await new Promise(r => setTimeout(r, 100));
             }
-            await new Promise(r => setTimeout(r, 100));
+            if (!engineFinalErrorRef.current) {
+                setEngineError(true);
+                setEngineErrorMessage("PDF engine didn't load. Retrying in 5s...");
+                startEngineRetryLoop();
+            }
+            engineWaitPromiseRef.current = null;
+            return false;
+        })();
+        return engineWaitPromiseRef.current;
+    };
+
+    // Convert unlocked PDFs only after current batch completes.
+    const processUnlockQueue = async () => {
+        if (unlockQueueRunningRef.current) return;
+        if (batchRunningRef.current) return;
+        if (filesRef.current.some(f => f.status === 'processing')) return;
+
+        unlockQueueRunningRef.current = true;
+        try {
+            const ready = await waitForEngine();
+            if (!ready) return;
+
+            let item;
+            while ((item = filesRef.current.find(f => f.status === unlockQueuedStatus))) {
+                await processFileItem(item);
+            }
+        } finally {
+            unlockQueueRunningRef.current = false;
         }
-        setEngineError(true);
-        return false;
+    };
+
+    // Queue a single unlocked PDF without triggering a full batch.
+    const handlePasswordSubmit = (id) => {
+        const currentFiles = filesRef.current;
+        const item = currentFiles.find(f => f.id === id);
+        if (!item || !item.password) return;
+        const nextFiles = currentFiles.map(f => {
+            if (f.id !== id) return f;
+            return { ...f, status: unlockQueuedStatus, errorMsg: null, passwordError: false, batchId: null };
+        });
+        filesRef.current = nextFiles;
+        setFiles(nextFiles);
+
+        const hasProcessing = nextFiles.some(f => f.status === 'processing');
+        if (!hasProcessing && !batchRunningRef.current) {
+            processUnlockQueue();
+        }
+    };
+
+    const processFileItem = async (item) => {
+        if (!item || item.canceled) return;
+        if (item.status === 'processing') return;
+        if (abortControllersRef.current.has(item.id)) return;
+
+        updateFileStatus(item.id, 'processing');
+        const controller = new AbortController();
+        abortControllersRef.current.set(item.id, controller);
+
+        await new Promise(r => setTimeout(r, 50));
+
+        let processPromise;
+        try {
+            if (typeof window.processPDF !== 'function') {
+                throw new Error("PDF Processing logic not loaded (processPDF is undefined). Check app/pdf2txt.js.");
+            }
+
+            processPromise = window.processPDF(item.file, { signal: controller.signal, password: item.password });
+            // Race allows cancel to release the loop even if file reading stalls.
+            let aborted = false;
+            const abortPromise = new Promise((_, reject) => {
+                if (controller.signal.aborted) {
+                    aborted = true;
+                    const err = new Error('Aborted');
+                    err.name = 'AbortError';
+                    reject(err);
+                    return;
+                }
+                controller.signal.addEventListener('abort', () => {
+                    aborted = true;
+                    const err = new Error('Aborted');
+                    err.name = 'AbortError';
+                    reject(err);
+                }, { once: true });
+            });
+
+            const markdown = await Promise.race([processPromise, abortPromise]);
+            if (!aborted) {
+                const hadPassword = item.wasPasswordProtected;
+                updateFileStatus(item.id, 'done', markdown, null, hadPassword ? { wasPasswordProtected: false } : null);
+                trackEvent('pdf | Conversion Success', { fileName: item.file.name });
+                if (hadPassword) {
+                    trackEvent('pdf | Password Unlocked');
+                }
+            }
+        } catch (err) {
+            let msg = 'Error converting file';
+
+            if (err.name === 'AbortError') {
+                updateFileStatus(item.id, 'skipped', null, null);
+                if (typeof processPromise !== 'undefined') {
+                    processPromise.catch(() => { });
+                }
+                return;
+            }
+
+            const isPasswordError = typeof passwordHelper.isPasswordError === 'function'
+                ? passwordHelper.isPasswordError(err)
+                : (err.name === 'PasswordException' || (err.message && err.message.includes('password')));
+
+            if (isPasswordError) {
+                setPasswordRequired(item.id, err);
+                trackEvent('pdf | Password Required', { fileName: item.file.name });
+                return;
+            } else if (err.name === 'NotReadableError' || err.name === 'NotFoundError') {
+                msg = 'File not available. Please make sure it is fully downloaded.';
+            } else {
+                msg = err.message || 'Unknown error';
+            }
+
+            console.error(err);
+            updateFileStatus(item.id, 'error', null, msg);
+            trackEvent('pdf | Conversion Failed', { fileName: item.file.name, error: msg });
+        } finally {
+            abortControllersRef.current.delete(item.id);
+        }
+    };
+
+    // Snapshot queued files to keep new uploads out of the active batch.
+    const markBatchItems = () => {
+        const batchId = batchIdRef.current + 1;
+        batchIdRef.current = batchId;
+        const nextFiles = filesRef.current.map(f => {
+            if (f.status !== 'queued') return f;
+            return { ...f, batchId };
+        });
+        filesRef.current = nextFiles;
+        setFiles(nextFiles);
+        return batchId;
     };
 
     const convertAll = async () => {
+        if (batchRunningRef.current) return;
+        const batchId = markBatchItems();
+        batchRunningRef.current = true;
         setFormatLocked(true);
         setIsProcessing(true);
-        const ready = await waitForEngine();
-        if (!ready) {
+        try {
+            const ready = await waitForEngine();
+            if (!ready) {
+                return;
+            }
+
+            const initialQueueCount = filesRef.current.filter(f => f.status === 'queued' && f.batchId === batchId).length;
+            trackEvent('pdf | Batch Convert Started', { count: initialQueueCount });
+
+            // Process sequentially
+            let item;
+            while ((item = filesRef.current.find(f => f.status === 'queued' && f.batchId === batchId))) {
+                await processFileItem(item);
+            }
+        } finally {
             setIsProcessing(false);
             setFormatLocked(false);
-            return;
+            batchRunningRef.current = false;
         }
-
-        const initialQueueCount = filesRef.current.filter(f => f.status === 'queued').length;
-        trackEvent('pdf | Batch Convert Started', { count: initialQueueCount });
-
-        // Process sequentially
-        let item;
-        while ((item = filesRef.current.find(f => f.status === 'queued'))) {
-            updateFileStatus(item.id, 'processing');
-            const controller = new AbortController();
-            abortControllersRef.current.set(item.id, controller);
-
-            await new Promise(r => setTimeout(r, 50));
-
-            let processPromise;
-            try {
-                if (typeof window.processPDF !== 'function') {
-                    throw new Error("PDF Processing logic not loaded (processPDF is undefined). Check app/pdf2txt.js.");
-                }
-
-                processPromise = window.processPDF(item.file, { signal: controller.signal });
-                // Race allows cancel to release the loop even if file reading stalls.
-                let aborted = false;
-                const abortPromise = new Promise((_, reject) => {
-                    if (controller.signal.aborted) {
-                        aborted = true;
-                        const err = new Error('Aborted');
-                        err.name = 'AbortError';
-                        reject(err);
-                        return;
-                    }
-                    controller.signal.addEventListener('abort', () => {
-                        aborted = true;
-                        const err = new Error('Aborted');
-                        err.name = 'AbortError';
-                        reject(err);
-                    }, { once: true });
-                });
-
-                const markdown = await Promise.race([processPromise, abortPromise]);
-                if (!aborted) {
-                    updateFileStatus(item.id, 'done', markdown);
-                    trackEvent('pdf | Conversion Success', { fileName: item.file.name });
-                }
-            } catch (err) {
-                let msg = 'Error converting file';
-
-                // Handle Password Protected PDF
-                if (err.name === 'AbortError') {
-                    updateFileStatus(item.id, 'skipped', null, null);
-                    if (typeof processPromise !== 'undefined') {
-                        processPromise.catch(() => { });
-                    }
-                    continue;
-                } else if (err.name === 'PasswordException') {
-                    msg = 'Password-protected PDF';
-                } else if (err.message && err.message.includes('password')) {
-                    msg = 'Password-protected PDF';
-                } else if (err.name === 'NotReadableError' || err.name === 'NotFoundError') {
-                    msg = 'File not available. Please make sure it is fully downloaded.';
-                } else {
-                    msg = err.message || 'Unknown error';
-                }
-
-                console.error(err);
-                updateFileStatus(item.id, 'error', null, msg);
-                trackEvent('pdf | Conversion Failed', { fileName: item.file.name, error: msg });
-            } finally {
-                abortControllersRef.current.delete(item.id);
-            }
+        if (filesRef.current.some(f => f.status === unlockQueuedStatus)) {
+            processUnlockQueue();
         }
-        setIsProcessing(false);
-        setFormatLocked(false);
     };
 
     const sanitizeFilename = (name, format) => {
@@ -456,6 +764,8 @@ const App = () => {
         done: files.filter(f => f.status === 'done').length,
         queued: files.filter(f => f.status === 'queued').length
     };
+
+    const anyProcessing = files.some(f => f.status === 'processing');
 
     const zipAvailable = typeof window.JSZip === 'function';
 
@@ -529,7 +839,7 @@ const App = () => {
                             ? h(
                                 'div',
                                 { className: 'text-[10px] font-semibold tracking-wider text-red-200 uppercase bg-red-500/10 border border-red-500/20 px-2 py-1 rounded-full' },
-                                "PDF engine didn't load. Please refresh the page."
+                                engineErrorMessage || "PDF engine didn't load. Please refresh."
                             )
                             : null
                     ),
@@ -569,7 +879,9 @@ const App = () => {
                             fileData: file,
                             onRemove: removeFile,
                             onDownload: downloadFile,
-                            outputFormat
+                            outputFormat,
+                            onPasswordChange: handlePasswordChange,
+                            onPasswordSubmit: handlePasswordSubmit
                         }))
                 ),
                 files.length > 0
@@ -635,7 +947,7 @@ const App = () => {
                                 {
                                     type: 'button',
                                     onClick: (e) => { e.preventDefault(); convertAll(); },
-                                    disabled: isProcessing || !engineReady,
+                                    disabled: isProcessing || anyProcessing || !engineReady,
                                     className: 'px-5 py-2.5 rounded-xl bg-white hover:bg-zinc-200 text-black text-sm font-semibold shadow-[0_0_20px_rgba(255,255,255,0.1)] disabled:opacity-40 disabled:cursor-not-allowed transition-all flex items-center gap-2',
                                     title: !engineReady ? 'PDF engine is loading' : 'Convert All'
                                 },

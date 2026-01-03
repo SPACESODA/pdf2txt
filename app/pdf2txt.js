@@ -4,6 +4,8 @@ const processPDF = async (file, options = {}) => {
     const MAX_PAGE_TEXT_BYTES = 200 * 1024 * 1024;
     const textEncoder = new TextEncoder();
     const signal = options.signal;
+    // Optional PDF password for encrypted documents.
+    const password = options.password;
     let pdf = null;
     const throwIfAborted = () => {
         if (signal && signal.aborted) {
@@ -16,6 +18,9 @@ const processPDF = async (file, options = {}) => {
         throwIfAborted();
         const arrayBuffer = await file.arrayBuffer();
         const documentOptions = { data: arrayBuffer };
+        if (typeof password === 'string' && password.length > 0) {
+            documentOptions.password = password;
+        }
         if (window.pdf2txtStandardFontDataUrl) {
             documentOptions.standardFontDataUrl = window.pdf2txtStandardFontDataUrl;
         }
