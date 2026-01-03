@@ -73,7 +73,7 @@ const Icon = ({ name, className }) => {
     return h('span', { ref, className: 'inline-flex items-center justify-center pointer-events-none' });
 };
 
-const FileRow = ({ fileData, onDownload, onRemove }) => {
+const FileRow = ({ fileData, onDownload, onRemove, outputFormat }) => {
     const IconStatus = () => {
         if (fileData.status === 'processing') return h(Icon, { name: 'loader-2', className: 'w-5 h-5 text-white animate-spin' });
         if (fileData.status === 'done') return h(Icon, { name: 'check', className: 'w-5 h-5 text-white' });
@@ -89,6 +89,8 @@ const FileRow = ({ fileData, onDownload, onRemove }) => {
         error: 'bg-red-500/10',
         skipped: 'bg-zinc-800/50'
     };
+
+    const downloadLabel = outputFormat === 'md' ? 'Download Markdown' : 'Download TXT';
 
     return h(
         'div',
@@ -130,7 +132,7 @@ const FileRow = ({ fileData, onDownload, onRemove }) => {
                     {
                         onClick: () => onDownload(fileData.id),
                         className: 'w-8 h-8 flex items-center justify-center text-zinc-200 hover:text-white hover:bg-white/10 rounded-full transition-colors',
-                        title: 'Download Markdown'
+                        title: downloadLabel
                     },
                     h(Icon, { name: 'download', className: 'w-4 h-4' })
                 )
@@ -153,6 +155,8 @@ const App = () => {
     const [isDragging, setIsDragging] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [engineReady, setEngineReady] = useState(false);
+    const [outputFormat, setOutputFormat] = useState('txt');
+    const [formatLocked, setFormatLocked] = useState(false);
     const fileInputRef = useRef(null);
     const abortControllersRef = useRef(new Map());
     const filesRef = useRef([]);
@@ -212,6 +216,9 @@ const App = () => {
 
         if (validFiles.length > 0) {
             trackEvent('pdf | Files Added', { count: validFiles.length });
+            if (!isProcessing) {
+                setFormatLocked(false);
+            }
         }
 
         updateFiles(prev => {
@@ -300,10 +307,12 @@ const App = () => {
     };
 
     const convertAll = async () => {
+        setFormatLocked(true);
         setIsProcessing(true);
         const ready = await waitForEngine();
         if (!ready) {
             setIsProcessing(false);
+            setFormatLocked(false);
             return;
         }
 
@@ -364,7 +373,7 @@ const App = () => {
                 } else if (err.message && err.message.includes('password')) {
                     msg = 'Password protected PDF';
                 } else if (err.name === 'NotReadableError' || err.name === 'NotFoundError') {
-                    msg = 'File not available offline. Make sure it is fully downloaded.';
+                    msg = 'File not available. Please make sure it is fully downloaded.';
                 } else {
                     msg = err.message || 'Unknown error';
                 }
@@ -377,23 +386,25 @@ const App = () => {
             }
         }
         setIsProcessing(false);
+        setFormatLocked(false);
     };
 
-    const sanitizeFilename = (name) => {
+    const sanitizeFilename = (name, format) => {
         let base = name.replace(/\.[^/.]+$/, "");
         base = base.replace(/[<>:"/\\|?*]/g, '_');
-        return base + ".md";
+        return base + (format === 'md' ? ".md" : ".txt");
     };
 
     const downloadFile = (id) => {
         const file = files.find(f => f.id === id);
         if (!file || !file.md) return;
 
-        const blob = new Blob([file.md], { type: 'text/markdown' });
+        const mime = outputFormat === 'md' ? 'text/markdown' : 'text/plain';
+        const blob = new Blob([file.md], { type: mime });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = sanitizeFilename(file.file.name);
+        a.download = sanitizeFilename(file.file.name, outputFormat);
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -403,7 +414,7 @@ const App = () => {
     const downloadAllZip = async () => {
         const ZipCtor = window.JSZip;
         if (typeof ZipCtor !== 'function') {
-            window.alert('Zip download unavailable. Please try again in a moment.');
+            window.alert('Zip download unavailable. Please refresh browser and convert again.');
             return;
         }
 
@@ -415,7 +426,7 @@ const App = () => {
         trackEvent('pdf | Download Zip', { count: processed.length });
 
         processed.forEach(f => {
-            zip.file(sanitizeFilename(f.file.name), f.md);
+            zip.file(sanitizeFilename(f.file.name, outputFormat), f.md);
         });
 
         const content = await zip.generateAsync({ type: "blob" });
@@ -429,7 +440,7 @@ const App = () => {
             String(now.getHours()).padStart(2, '0') +
             String(now.getMinutes()).padStart(2, '0');
 
-        a.download = `md_files_${timestamp}.zip`;
+        a.download = `${outputFormat}_files_${timestamp}.zip`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -491,7 +502,7 @@ const App = () => {
             ),
             h(
                 'div',
-                { className: 'flex-1 flex flex-col lg:min-h-0 min-h-[50vh] bg-zinc-900 rounded-2xl border border-zinc-700 overflow-hidden' },
+                { className: 'flex-1 flex flex-col lg:min-h-0 min-h-[50vh] max-h-[75vh] lg:max-h-none bg-zinc-900 rounded-2xl border border-zinc-700 overflow-hidden' },
                 h(
                     'div',
                     { className: 'px-5 py-4 border-b border-zinc-700 flex items-center justify-between bg-white/[0.02]' },
@@ -546,13 +557,54 @@ const App = () => {
                             key: file.id,
                             fileData: file,
                             onRemove: removeFile,
-                            onDownload: downloadFile
+                            onDownload: downloadFile,
+                            outputFormat
                         }))
                 ),
                 files.length > 0
                     ? h(
                         'div',
-                        { className: 'p-4 border-t border-zinc-700 bg-white/[0.02] flex justify-end gap-3' },
+                        { className: 'p-4 border-t border-zinc-700 bg-white/[0.02] flex flex-nowrap items-center gap-3 overflow-x-auto' },
+                        h(
+                            'div',
+                            {
+                                className: `flex items-center gap-2 text-xs font-medium text-zinc-300 mr-auto ${formatLocked ? 'opacity-20 pointer-events-none' : ''}`
+                            },
+                            h(
+                                'div',
+                                { className: 'inline-flex rounded-full border border-zinc-700 bg-zinc-900 p-0.5' },
+                                h(
+                                    'button',
+                                    {
+                                        type: 'button',
+                                        onClick: (e) => { e.preventDefault(); if (!formatLocked) setOutputFormat('txt'); },
+                                        disabled: formatLocked,
+                                        'aria-pressed': outputFormat === 'txt',
+                                        'aria-disabled': formatLocked,
+                                        className: `px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide transition-colors ${outputFormat === 'txt'
+                                            ? 'bg-white text-black'
+                                            : 'text-zinc-400 hover:text-white'
+                                            }`
+                                    },
+                                    'TXT'
+                                ),
+                                h(
+                                    'button',
+                                    {
+                                        type: 'button',
+                                        onClick: (e) => { e.preventDefault(); if (!formatLocked) setOutputFormat('md'); },
+                                        disabled: formatLocked,
+                                        'aria-pressed': outputFormat === 'md',
+                                        'aria-disabled': formatLocked,
+                                        className: `px-3 py-1 rounded-full text-[11px] font-semibold tracking-wide transition-colors ${outputFormat === 'md'
+                                            ? 'bg-white text-black'
+                                            : 'text-zinc-400 hover:text-white'
+                                            }`
+                                    },
+                                    'MD'
+                                )
+                            )
+                        ),
                         stats.done > 0
                             ? h(
                                 'button',
