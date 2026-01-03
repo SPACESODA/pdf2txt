@@ -22,6 +22,7 @@ const processPDF = async (file, options = {}) => {
         pdf = await pdfjsLib.getDocument(documentOptions).promise;
 
         let allItems = [];
+        const pageHeights = {};
 
         // 1. Extract raw items
         // Iterate through every page to extract text chunks (items) with their X/Y coordinates and font height.
@@ -30,6 +31,7 @@ const processPDF = async (file, options = {}) => {
             throwIfAborted();
             const page = await pdf.getPage(i);
             const viewport = page.getViewport({ scale: 1.0 });
+            pageHeights[i] = viewport.height;
             const textContent = await page.getTextContent();
 
             let pageTextBytes = 0;
@@ -230,7 +232,61 @@ const processPDF = async (file, options = {}) => {
             return line;
         };
 
-        lines.forEach((line) => {
+        const PAGE_NUMBER_BAND_RATIO = 0.1;
+        const PAGE_NUMBER_MAX_FONT_RATIO = 0.95;
+        const PAGE_NUMBER_MIN_REPEAT_RATIO = 0.4;
+        const pageNumberYBucket = Math.max(4, bodyHeight * 0.5);
+        const normalizePageMarker = (text) => {
+            let normalized = text.toLowerCase();
+            normalized = normalized.replace(/[\p{P}\p{S}]/gu, '');
+            normalized = normalized.replace(/\p{N}/gu, '#');
+            normalized = normalized.replace(/\s+/g, '');
+            return normalized;
+        };
+
+        const lineMeta = lines.map(line => {
+            const lineStr = buildLineText(line.items);
+            const maxLineHeight = Math.max(...line.items.map(i => i.h));
+            return { line, lineStr, maxLineHeight };
+        });
+
+        const pageMarkerClusters = new Map();
+        lineMeta.forEach((meta, index) => {
+            if (!meta.lineStr) return;
+            const pageHeight = pageHeights[meta.line.page];
+            if (!pageHeight) return;
+
+            const bandSize = pageHeight * PAGE_NUMBER_BAND_RATIO;
+            const inBand = meta.line.y <= bandSize || meta.line.y >= pageHeight - bandSize;
+            if (!inBand) return;
+            if (meta.maxLineHeight >= bodyHeight * PAGE_NUMBER_MAX_FONT_RATIO) return;
+
+            const normalized = normalizePageMarker(meta.lineStr);
+            if (!normalized) return;
+
+            const band = meta.line.y <= bandSize ? 'top' : 'bottom';
+            const yBucket = Math.round(meta.line.y / pageNumberYBucket);
+            const key = `${normalized}|${band}|${yBucket}`;
+
+            let cluster = pageMarkerClusters.get(key);
+            if (!cluster) {
+                cluster = { pages: new Set(), indices: [] };
+                pageMarkerClusters.set(key, cluster);
+            }
+            cluster.pages.add(meta.line.page);
+            cluster.indices.push(index);
+        });
+
+        const minRepeat = Math.ceil(pdf.numPages * PAGE_NUMBER_MIN_REPEAT_RATIO);
+        const pageNumberLineIndices = new Set();
+        pageMarkerClusters.forEach(cluster => {
+            if (cluster.pages.size >= Math.max(2, minRepeat)) {
+                cluster.indices.forEach(idx => pageNumberLineIndices.add(idx));
+            }
+        });
+
+        lineMeta.forEach((meta, index) => {
+            const line = meta.line;
             // Paragraph Detection: Significant vertical gap
             let gap = null;
             if (lastPage === line.page && lastY !== -1) {
@@ -253,15 +309,13 @@ const processPDF = async (file, options = {}) => {
             lastPage = line.page;
 
             // Construct line string
-            let lineStr = buildLineText(line.items);
+            let lineStr = meta.lineStr;
             if (!lineStr) return;
 
-            // Filter valid page numbers (e.g., "Page 1", "1 of 10", or just "1" at bottom)
-            const isPageNum = /^(Page\s*)?\d+(\s*of\s*\d+)?$/i.test(lineStr);
-            if (isPageNum) return;
+            if (pageNumberLineIndices.has(index)) return;
 
             // Get max font size in this line to determine header status
-            const maxLineHeight = Math.max(...line.items.map(i => i.h));
+            const maxLineHeight = meta.maxLineHeight;
 
             // Header Detection
             let prefix = "";
