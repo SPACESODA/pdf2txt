@@ -60,6 +60,9 @@ const processPDF = async (file, options = {}) => {
                     isWhitespace
                 });
             }
+            if (typeof page.cleanup === 'function') {
+                page.cleanup();
+            }
         }
 
         // Handle case: Empty PDF or Scanned PDF with no OCR
@@ -304,6 +307,7 @@ const processPDF = async (file, options = {}) => {
         // --- Post-Processing Cleaning ---
 
         let rawMD = markdownLines.join("\n");
+        throwIfAborted();
 
         // 1. Merge hyphenated words at end of line
         rawMD = rawMD.replace(/([\p{L}\p{N}])-\n([\p{L}\p{N}])/gu, '$1$2');
@@ -341,6 +345,9 @@ const processPDF = async (file, options = {}) => {
             let buffer = lines[0];
 
             for (let i = 1; i < lines.length; i++) {
+                if (i % 200 === 0) {
+                    throwIfAborted();
+                }
                 const current = lines[i];
 
                 // Conditions to flush the buffer (start a new line):
@@ -354,6 +361,8 @@ const processPDF = async (file, options = {}) => {
                     !current.trim() ||
                     isHeading(current) ||
                     isHeading(buffer) ||
+                    isList(current) ||
+                    isList(buffer) ||
                     (isHardStop(buffer) && !endsWithDash(buffer));
 
                 if (shouldFlush) {
