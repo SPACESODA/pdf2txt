@@ -155,6 +155,7 @@ const App = () => {
     const [isDragging, setIsDragging] = useState(false);
     const [isProcessing, setIsProcessing] = useState(false);
     const [engineReady, setEngineReady] = useState(false);
+    const [engineError, setEngineError] = useState(false);
     const [outputFormat, setOutputFormat] = useState('txt');
     const [formatLocked, setFormatLocked] = useState(false);
     const fileInputRef = useRef(null);
@@ -169,6 +170,7 @@ const App = () => {
             const ready = typeof window.pdfjsLib !== 'undefined' && typeof window.processPDF === 'function';
             if (ready && isMounted) {
                 setEngineReady(true);
+                setEngineError(false);
                 clearInterval(timer);
             }
         }, 100);
@@ -299,10 +301,12 @@ const App = () => {
             const ready = typeof window.pdfjsLib !== 'undefined' && typeof window.processPDF === 'function';
             if (ready) {
                 setEngineReady(true);
+                setEngineError(false);
                 return true;
             }
             await new Promise(r => setTimeout(r, 100));
         }
+        setEngineError(true);
         return false;
     };
 
@@ -514,11 +518,18 @@ const App = () => {
                             { className: 'text-xs font-semibold tracking-wider text-zinc-300 uppercase' },
                             `Queue (${stats.done}/${stats.total})`
                         ),
-                        !engineReady
+                        !engineReady && !engineError
                             ? h(
                                 'div',
                                 { className: 'text-[10px] font-medium tracking-wider text-zinc-500 uppercase' },
                                 'PDF engine loading...'
+                            )
+                            : null,
+                        engineError
+                            ? h(
+                                'div',
+                                { className: 'text-[10px] font-semibold tracking-wider text-red-200 uppercase bg-red-500/10 border border-red-500/20 px-2 py-1 rounded-full' },
+                                "PDF engine didn't load. Please refresh the page."
                             )
                             : null
                     ),
