@@ -456,7 +456,17 @@ const processPDF = async (file, options = {}) => {
             finalMD += "\n\n";
         }
         finalMD += "---\n\n";
-        finalMD += "File converted using pdf2txt\nhttps://github.com/SPACESODA/pdf2txt\n\n";
+        const convertedAt = new Date();
+        const convertedAtUTC = [
+            convertedAt.getUTCFullYear(),
+            String(convertedAt.getUTCMonth() + 1).padStart(2, "0"),
+            String(convertedAt.getUTCDate()).padStart(2, "0"),
+        ].join("-");
+        const convertedAtTime = [
+            String(convertedAt.getUTCHours()).padStart(2, "0"),
+            String(convertedAt.getUTCMinutes()).padStart(2, "0"),
+        ].join(":");
+        finalMD += `File converted by pdf2txt\nhttps://github.com/SPACESODA/pdf2txt\nConverted at: ${convertedAtUTC} ${convertedAtTime} UTC\n\n`;
         return finalMD;
 
     } finally {
