@@ -872,7 +872,8 @@ const App = () => {
                                 { className: 'w-16 h-16 rounded-full bg-zinc-800 flex items-center justify-center' },
                                 h(Icon, { name: 'layout-list', className: 'w-8 h-8 text-zinc-400' })
                             ),
-                            h('p', { className: 'text-zinc-600 text-sm font-medium' }, 'Queue is empty')
+                            h('p', { className: 'text-zinc-600 text-sm font-medium' }, 'Queue is empty'),
+                            h('p', { className: 'text-zinc-500 text-xs' }, 'All files are processed locally in your browser.')
                         )
                         : files.map(file => h(FileRow, {
                             key: file.id,
