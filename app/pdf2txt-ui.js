@@ -331,7 +331,7 @@ const App = () => {
             let processPromise;
             try {
                 if (typeof window.processPDF !== 'function') {
-                    throw new Error("PDF Processing logic not loaded (processPDF is undefined). Check app/pdf2md.js.");
+                    throw new Error("PDF Processing logic not loaded (processPDF is undefined). Check app/pdf2txt.js.");
                 }
 
                 processPromise = window.processPDF(item.file, { signal: controller.signal });

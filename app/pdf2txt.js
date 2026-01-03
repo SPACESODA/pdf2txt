@@ -1,4 +1,4 @@
-// PDF Processing Logic - pdf2md
+// PDF Processing Logic - pdf2txt
 
 const processPDF = async (file, options = {}) => {
     const MAX_PAGE_TEXT_BYTES = 200 * 1024 * 1024;
@@ -16,8 +16,8 @@ const processPDF = async (file, options = {}) => {
         throwIfAborted();
         const arrayBuffer = await file.arrayBuffer();
         const documentOptions = { data: arrayBuffer };
-        if (window.pdf2mdStandardFontDataUrl) {
-            documentOptions.standardFontDataUrl = window.pdf2mdStandardFontDataUrl;
+        if (window.pdf2txtStandardFontDataUrl) {
+            documentOptions.standardFontDataUrl = window.pdf2txtStandardFontDataUrl;
         }
         pdf = await pdfjsLib.getDocument(documentOptions).promise;
 
@@ -308,7 +308,7 @@ const processPDF = async (file, options = {}) => {
         // 1. Merge hyphenated words at end of line
         rawMD = rawMD.replace(/([\p{L}\p{N}])-\n([\p{L}\p{N}])/gu, '$1$2');
 
-        // 2. Merge hard-wrapped lines (CRITICAL for PDF to MD)
+        // 2. Merge hard-wrapped lines (CRITICAL for conversion)
         // Merge lines that look like a wrapped sentence, preserving paragraph breaks.
         const mergeWrappedLines = (text) => {
             const lines = text.split("\n");
@@ -388,7 +388,7 @@ const processPDF = async (file, options = {}) => {
             finalMD += "\n\n";
         }
         finalMD += "---\n\n";
-        finalMD += "File converted using pdf2md\nhttps://github.com/SPACESODA/pdf2md\n\n";
+        finalMD += "File converted using pdf2txt\nhttps://github.com/SPACESODA/pdf2txt\n\n";
         return finalMD;
 
     } finally {

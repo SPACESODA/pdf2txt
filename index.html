@@ -4,21 +4,21 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>pdf2md - PDF to Markdown Converter</title>
-    <meta name="description" content="Convert PDFs to clean, LLM-ready Markdown in your browser. Batch process files locally with no uploads.">
+    <title>pdf2txt - PDF to Text Converter</title>
+    <meta name="description" content="Convert PDFs to clean, LLM-ready text files in your browser. Batch process files locally with no uploads.">
     <meta name="robots" content="index,follow">
-    <link rel="canonical" href="https://spacesoda.github.io/pdf2md/">
+    <link rel="canonical" href="https://spacesoda.github.io/pdf2txt/">
     <!-- CSP -->
     <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' https://unpkg.com https://cdn.tailwindcss.com https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://cloud.umami.is; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; connect-src 'self' https://cdnjs.cloudflare.com https://cdn.jsdelivr.net https://unpkg.com https://cloud.umami.is https://api-gateway.umami.dev; worker-src 'self' blob: https://cdnjs.cloudflare.com https://cdn.jsdelivr.net;">
     <!-- Social -->
-    <meta property="og:title" content="pdf2md - PDF to Markdown Converter">
-    <meta property="og:description" content="Convert PDFs to clean, LLM-ready Markdown in your browser. Batch process files locally with no uploads.">
+    <meta property="og:title" content="pdf2txt - PDF to Text Converter">
+    <meta property="og:description" content="Convert PDFs to clean, LLM-ready text files in your browser. Batch process files locally with no uploads.">
     <meta property="og:type" content="website">
-    <meta property="og:url" content="https://spacesoda.github.io/pdf2md/">
+    <meta property="og:url" content="https://spacesoda.github.io/pdf2txt/">
     <meta property="twitter:card" content="summary">
-    <meta property="twitter:title" content="pdf2md - PDF to Markdown Converter">
-    <meta property="twitter:description" content="Convert PDFs to clean, LLM-ready Markdown in your browser. Batch process files locally with no uploads.">
-    <meta property="twitter:url" content="https://spacesoda.github.io/pdf2md/">
+    <meta property="twitter:title" content="pdf2txt - PDF to Text Converter">
+    <meta property="twitter:description" content="Convert PDFs to clean, LLM-ready text files in your browser. Batch process files locally with no uploads.">
+    <meta property="twitter:url" content="https://spacesoda.github.io/pdf2txt/">
     <!-- Favicons -->
     <link rel="apple-touch-icon" sizes="180x180" href="assets/apple-touch-icon.png">
     <link rel="icon" type="image/png" sizes="32x32" href="assets/favicon-32x32.png">
@@ -45,12 +45,12 @@
     <script defer src="https://unpkg.com/lucide@latest"></script>
     <!-- Logic Dependencies (PDF.js, JSZip) -->
     <script defer src="https://cdn.jsdelivr.net/npm/pdfjs-dist@3.11.174/build/pdf.min.js" crossorigin="anonymous"></script>
-    <script defer src="app/pdf2md-config.js"></script>
+    <script defer src="app/pdf2txt-config.js"></script>
     <script defer src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
     <!-- Core App Logic -->
-    <script defer src="app/pdf2md.js"></script>
+    <script defer src="app/pdf2txt.js"></script>
     <!-- UI -->
-    <script defer src="app/pdf2md-ui.js"></script>
+    <script defer src="app/pdf2txt-ui.js"></script>
     <!-- Analytics -->
     <script defer src="https://cloud.umami.is/script.js" data-website-id="8771ed9f-edd3-4665-bf16-1bc95940af08"></script>
 </head>
@@ -65,9 +65,9 @@
         <!-- Navbar -->
         <nav class="flex items-center justify-between mb-8 lg:mb-8">
             <a href="./" class="text-xl font-bold text-white tracking-tight hover:text-zinc-300 transition-colors">
-                pdf2md
+                pdf2txt
             </a>
-            <a href="https://github.com/SPACESODA/pdf2md/" class="text-zinc-400 hover:text-white transition-colors" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
+            <a href="https://github.com/SPACESODA/pdf2txt/" class="text-zinc-400 hover:text-white transition-colors" target="_blank" rel="noopener noreferrer" aria-label="GitHub">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="w-6 h-6"><path d="M15 22v-4a4.8 4.8 0 0 0-1-3.5c3 0 6-2 6-5.5.08-1.25-.27-2.48-1-3.5.28-1.15.28-2.35 0-3.5 0 0-1 0-3 1.5-2.64-.5-5.36.5-8 0C6 2 5 2 5 2c-.3 1.15-.3 2.35 0 3.5A5.403 5.403 0 0 0 4 9c0 3.5 3 5.5 6 5.5-.39.49-.68 1.05-.85 1.65-.17.6-.22 1.23-.15 1.85v4"/><path d="M9 18c-4.51 2-5-2-7-2"/></svg>
             </a>
         </nav>
@@ -75,7 +75,7 @@
         <!-- Hero -->
         <div class="text-center max-w-3xl mx-auto space-y-4 mb-2 lg:mb-2">
             <h1 class="text-2xl md:text-3xl font-bold text-white tracking-tight leading-tight md:max-w-[60%] mx-auto">
-                Convert PDFs into clean, LLM-ready Markdown files.
+                Convert PDFs into clean, LLM-ready text files.
             </h1>
             <p class="text-sm text-zinc-400 leading-relaxed max-w-2xl mx-auto">
                 All files are processed locally in your browser. No uploads to any server.
@@ -91,7 +91,7 @@
             </div>
             <div>Released under the MIT License.</div>
             <div>
-                <a href="https://github.com/SPACESODA/pdf2md/" class="hover:text-zinc-200 transition-colors" rel="noopener noreferrer" target="_blank">
+                <a href="https://github.com/SPACESODA/pdf2txt/" class="hover:text-zinc-200 transition-colors" rel="noopener noreferrer" target="_blank">
                     ★ Star on GitHub
                 </a>
             </div>

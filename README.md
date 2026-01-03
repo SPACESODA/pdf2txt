@@ -1,12 +1,12 @@
-# pdf2md: PDF to Markdown Converter
+# pdf2txt: PDF to Text Converter
 
-**Convert PDF books into clean, LLM-ready markdown files.**
+**Convert PDFs into clean, LLM-ready text.**
 
-**pdf2md** is a robust client-side tool that converts PDF documents into formatted Markdown text directly in your web browser. It is designed specifically to prepare text for Large Language Models (LLMs), ensuring clean output by removing hyphenation, fixing line breaks, and preserving document structure as much as possible.
+**pdf2txt** runs entirely in your browser, so your files never leave your device. It extracts readable text from PDFs and cleans common artifacts like hyphenation and broken lines while preserving headings and structure when possible, making the output ready for LLMs.
 
 ## ✨ Features
 
-- **LLM-Ready Output**: Automatically cleans up text by:
+- **LLM-ready Output**: Automatically cleans up text by:
   - Removing split words caused by hyphenation.
   - Merging hard-wrapped lines while preserving paragraphs.
   - Detecting and formatting headers.
